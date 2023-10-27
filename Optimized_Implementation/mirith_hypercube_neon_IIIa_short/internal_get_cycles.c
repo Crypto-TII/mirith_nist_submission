@@ -38,7 +38,7 @@ int cmp(const void *arg1, const void *arg2)
 
 double average(const uint64_t *cc, const uint64_t n_bench)
 {
-    int i;
+    uint64_t i;
     uint64_t acc = 0;
 
     for (i = 0; i < n_bench; i++)

@@ -3,9 +3,12 @@
 #include <string.h>
 #include <math.h>
 
-#if __APPLE__
+#ifdef __APPLE__
+#ifdef __aarch64__
 #define _MAC_OS_
 #define _M1CYCLES_
+#include "m1cycles.h"
+#endif
 #endif
 
 #include "../internal_get_cycles.h"
@@ -14,7 +17,6 @@
 #include "../packing.h"
 #include "../random.h"
 #include "../sign.h"
-#include "m1cycles.h"
 
 #if __unix
 #include <sys/resource.h>
@@ -24,48 +26,59 @@
 #error "Stack resizing on Windows not implemented yet!"
 #endif
 
-uint32_t N_BENCH = 256;     /* Number of tests. */
+uint32_t N_BENCH = 1024;     /* Number of tests. */
 uint32_t MSG_LEN = 80;       /* Message length. */
 
-// TODO
 /*
  * Read the cycle counter. The 'lfence' call should guarantee enough
  * serialization without adding too much overhead (contrary to what,
  * say, 'cpuid' would do).
  */
-#if defined(_MAC_OS_)&&defined(_M1CYCLES_)
-#include "m1cycles.h"
-#endif
 
-#if !defined(CONFIG_BENCH_SYSTIME)
 #if defined(__aarch64__)
-       uint64_t get_cycles(void) {
-        uint64_t val;
-#if defined(_MAC_OS_)
-        #if defined(_M1CYCLES_)
-    return __m1_rdtsc();
-  #else
-    // counter-timer virtual count register
-    // better than nothing.
-    __asm__ __volatile__ ("mrs %0, cntvct_el0" : "=r" (val));
-  #endif
+
+/// only on ARM machines:
+#ifndef _M1CYCLES_ 
+#include <sys/types.h>
+#include <sys/syscall.h>
+#include <linux/perf_event.h>
+
+static int fddev = -1;
+__attribute__((constructor)) static void
+init(void) {
+	static struct perf_event_attr attr;
+	attr.type = PERF_TYPE_HARDWARE;
+	attr.config = PERF_COUNT_HW_CPU_CYCLES;
+	fddev = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
+}
+
+__attribute__((destructor)) static void
+fini(void) {
+	close(fddev);
+}
+#endif /// NOT M1 ARM
+
+inline uint64_t get_cycles(void) {
+	#if defined(_M1CYCLES_)
+		return __m1_rdtsc();
+	#else 
+    	uint64_t result;
+		if (read(fddev, &result, sizeof(result)) < sizeof(result)) return 0;
+		return result;
+	#endif
+	
+}
+
 #else
-        // performance monitors cycle count register. likely to be banned in user space.
-        // see https://github.com/mupq/pqax/tree/main/enable_ccr
-        __asm__ __volatile__ ("mrs %0, PMCCNTR_EL0" : "=r" (val));
-#endif  // _MAC_OS_
-        return val;
-    }
-#else
-    /* Copied from http://en.wikipedia.org/wiki/RDTSC */
-static inline uint64_t get_cycles(void) {
-	uint32_t lo, hi;
-	/* We cannot use "=A", since this would use %rax on x86_64 */
-	__asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
-	return (uint64_t)hi << 32 | lo;
+/* Copied from http://en.wikipedia.org/wiki/RDTSC */
+inline uint64_t get_cycles(void) {
+    uint32_t lo, hi;
+    /* We cannot use "=A", since this would use %rax on x86_64 */
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return (uint64_t)hi << 32 | lo;
 }
 #endif  // __aarch64__
-#endif  // CONFIG_BENCH_SYSTIME
+
 
 #if defined (OFFLINE_CC)
 extern uint64_t offline_cc;
@@ -76,14 +89,11 @@ extern uint64_t begin_offline;
 /* This goes outside of 'main' to avoid stack overflows. */
 int bench_mirith()
 {
-    int i;
+    uint32_t i;
     uint64_t cc_keyg[N_BENCH];
     uint64_t cc_sign[N_BENCH];
     uint64_t cc_verf[N_BENCH];
     uint64_t begin, end;
-#if defined(_MAC_OS_)&&defined(_M1CYCLES_)
-    __m1_setup_rdtsc();
-#endif
 
 #if defined (OFFLINE_CC)
     uint64_t cc_off[N_BENCH];
@@ -203,10 +213,11 @@ int bench_mirith()
 int main()
 {
 
-/* 'Va, Short' and 'Vb, Short' requires more than 1 MiB of stack memory.
- * All the other modes requires less than 1 MiB. */
-#if MIRITH_MODE == 9 || MIRITH_MODE == 11
+#if defined(__APPLE__) && defined(_MAC_OS_)&&defined(_M1CYCLES_)
+    __m1_setup_rdtsc();
+#endif
 
+#if MIRITH_MODE == 3 || MIRITH_MODE == 7 || MIRITH_MODE == 11 || MIRITH_MODE == 15 || MIRITH_MODE == 19 || MIRITH_MODE == 23
 #if __unix
 
     struct rlimit rl;
@@ -214,7 +225,7 @@ int main()
     /* Increase stack size to 64 MiB. */
     getrlimit(RLIMIT_STACK, &rl);
 
-    rl.rlim_cur = 16 * 1024 * 1024; /* 16 MiB. */
+    rl.rlim_cur = 64 * 1024 * 1024;
     
     if (setrlimit(RLIMIT_STACK, &rl) != 0)
     {

@@ -24,6 +24,7 @@ set(COMMON_SOURCES
         ${PROJECT_SOURCE_DIR}/sign.c
         ${PROJECT_SOURCE_DIR}/challenges.c
         ${PROJECT_SOURCE_DIR}/KeccakHash.c
+        ${PROJECT_SOURCE_DIR}/internal_get_cycles.c
         ${PROJECT_SOURCE_DIR}/KeccakP-1600-AVX2.s
         )
 

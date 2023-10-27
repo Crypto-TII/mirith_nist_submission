@@ -23,9 +23,8 @@ uint32_t N_BENCH = 1024;     /* Number of tests. */
 uint32_t MSG_LEN = 80;       /* Message length. */
 
 /* This goes outside of 'main' to avoid stack overflows. */
-int bench_mirith()
-{
-    int i;
+int bench_mirith(void) {
+    uint64_t i;
     uint64_t cc_keyg[N_BENCH];
     uint64_t cc_sign[N_BENCH];
     uint64_t cc_verf[N_BENCH];
@@ -35,7 +34,7 @@ int bench_mirith()
     uint64_t cc_off[N_BENCH];
 #endif
     
-    // printf("\n\nBenchmarks...\n\n");
+    printf("\n\nBenchmarks...\n\n");
     
     // First N iteractions warm the processor in order to get a stable measurement
     for (i = 0; i < N_BENCH * 2; i++)
@@ -141,16 +140,6 @@ int bench_mirith()
         printf("%lu ", cc_verf[i]);
     }    
 
-// #if defined (OFFLINE_CC)
-//     double avg_sign, avg_off;
-//     avg_sign = average(cc_sign, N_BENCH);
-//     avg_off = average(cc_off, N_BENCH);
-//     // printf("\n\nsign: %.2lf average | offline: %.2lf average | speedup: %.2lf \n", avg_sign, avg_off, (avg_off / avg_sign) * 100);
-//     printf("%.0lf %.0lf %.0lf \n", avg_off, avg_sign - avg_off, avg_sign);
-// #else
-//     printf("\n\nsign: %.2lf average\n", average(cc_sign, N_BENCH));
-// #endif
-
     printf("\n\nDONE!");
     
     return 0;
@@ -159,21 +148,17 @@ int bench_mirith()
 int main()
 {
 
-/* 'Va, Short' and 'Vb, Short' requires more than 1 MiB of stack memory.
- * All the other modes requires less than 1 MiB. */
-#if MIRITH_MODE == 3 || MIRITH_MODE == 9 || MIRITH_MODE == 11
-
+#if MIRITH_MODE == 3 || MIRITH_MODE == 7 || MIRITH_MODE == 11 || MIRITH_MODE == 15 || MIRITH_MODE == 19 || MIRITH_MODE == 23
 #if __unix
 
     struct rlimit rl;
 
-    /* Increase stack size to 64 MiB. */
+    /* Increase stack size to 128 MiB. */
     getrlimit(RLIMIT_STACK, &rl);
 
-    rl.rlim_cur = 128 * 1024 * 1024; /* 16 MiB. */
+    rl.rlim_cur = 128 * 1024 * 1024; /* 128 MiB. */
     
-    if (setrlimit(RLIMIT_STACK, &rl) != 0)
-    {
+    if (setrlimit(RLIMIT_STACK, &rl) != 0) {
         printf("Error: Cannot increase stack size!\n");
         return -1;
     }
@@ -184,7 +169,7 @@ int main()
 #error "Stack resizing on Windows not implemented yet!"
 #endif
 
-#endif /* #if MIRITH_MODE == 9 || MIRITH_MODE == 11 */
+#endif
 
     return bench_mirith();
 }

@@ -39,7 +39,7 @@ void generate_subtree(seed_t *subtree, const hash_t salt, const seed_t root, uin
     memcpy(&subtree[0], root, SEED_SIZE); //
 
     /* Generate the children nodes. */
-    for (i = 0; i < ((1 << height) - 1); i++)
+    for (i = 0; i < ((1u << height) - 1u); i++)
     {
         prng_init(&prng, salt, subtree[i]);
         prng_bytes(&prng, subtree[LEFT_CHILD(i)], SEED_SIZE);

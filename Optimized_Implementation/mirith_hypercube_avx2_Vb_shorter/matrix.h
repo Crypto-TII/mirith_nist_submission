@@ -54,25 +54,17 @@ void matrix_add(ff_t *matrix1, const ff_t *matrix2, uint32_t n_rows, uint32_t n_
 void matrix_add_multiple(ff_t *matrix1, ff_t scalar, const ff_t *matrix2,
     uint32_t n_rows, uint32_t n_cols);
 
-/* Overwrite 'matrix1' with 'matrix1 + matrix2 * matrix3'. */
-void matrix_add_product(ff_t *matrix1, const ff_t *matrix_2, const ff_t *matrix3,
-                 uint32_t n_rows1, uint32_t n_cols1, uint32_t n_cols2);
-
-/* Overwrite 'matrix1' with 'matrix1 - matrix2 * matrix3'. */
-void matrix_subtract_product(ff_t *matrix1, const ff_t *matrix_2, const ff_t *matrix3,
-                 uint32_t n_rows1, uint32_t n_cols1, uint32_t n_cols2);
-                 
 /* Overwrite 'matrix1' with 'matrix1 - matrix2'. */
 void matrix_subtract(ff_t *matrix1, const ff_t *matrix2, uint32_t n_rows, uint32_t n_cols);
 
 /* Overwrite 'matrix1' with 'matrix1 - scalar * matrix2'. */
 void matrix_subtract_multiple(ff_t *matrix1, ff_t scalar, const ff_t *matrix2,
     uint32_t n_rows, uint32_t n_cols);
-    
+
 /* Write 'matrix1 * matrix2' over 'result'. */
 void matrix_product(ff_t *result, const ff_t *matrix1, const ff_t *matrix2,
     uint32_t n_rows1, uint32_t n_cols1, uint32_t n_cols2);
-    
+
 /* Write '[matrix1 | matrix2]' over 'result'. */
 void matrix_horizontal_concatenation(ff_t *result, const ff_t *matrix1, const ff_t *matrix2,
     uint32_t n_rows, uint32_t n_cols1, uint32_t n_cols2);

@@ -5,5 +5,5 @@ compile_commands.json
 cmake-build-debug/
 cmake-build-release/
 bench/bench_mirith
-nist/PQCgenKat_sign
+nist/PQCgenKAT_sign
 test/test_mirith

@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS= -O3 -march=native -flto -mtune=native -flax-vector-conversions -funroll-loops -fomit-frame-pointer -std=c11 -Wall -Wextra -Wl,-stack_size,0x20000000 -DOFFLINE_CC
+CFLAGS= -g -O3 -march=native -mtune=native -flto -flax-vector-conversions -funroll-loops -fomit-frame-pointer -std=c11 -Wall -Wextra -DOFFLINE_CC
+
 DEPS=$(wildcard ../*.h)
 OBJ= $(patsubst ../%.c,../%.o,$(wildcard ../*.c))
 OBJ+=$(patsubst ../%.s,../%.o,$(wildcard ../*.s))

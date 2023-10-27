@@ -99,7 +99,6 @@ int test_mirith()
 
 int main()
 {
-
 /* Some parameter sets requires a stack larger than 8 MiB. */
 #if MIRITH_MODE == 3 || MIRITH_MODE == 7 || MIRITH_MODE == 11 \
     || MIRITH_MODE == 15 || MIRITH_MODE == 19 || MIRITH_MODE == 23

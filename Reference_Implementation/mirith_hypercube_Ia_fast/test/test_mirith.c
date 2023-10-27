@@ -14,12 +14,11 @@
 #error "Stack resizing on Windows not implemented yet!"
 #endif
 
-int N_TESTS = 100;  /* Number of tests. */
-int MSG_LEN = 80;   /* Message length. */
+uint32_t N_TESTS = 100;  /* Number of tests. */
+uint32_t MSG_LEN = 80;   /* Message length. */
 
 /* This goes outside of 'main' to avoid stack overflows. */
-int test_mirith()
-{
+int test_mirith() {
     uint32_t i;
     
     printf("\n\ntest_mirith...\n");

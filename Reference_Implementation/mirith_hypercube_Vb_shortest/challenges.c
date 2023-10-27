@@ -30,14 +30,8 @@ void get_second_challenges(uint32_t i_star[TAU], const hash_t hash2)
         prng_bytes(&prng, &r, sizeof(r));
         
         /* NOTE: It is well-known that this method to generate
-         * a random integer in [0, N_PARTIES_ROUND - 1] is slighly biased
+         * a random integer in [0, N_PARTIES_ROUND - 1] is slightly biased
          * toward small values. */
         i_star[l] = r % N_PARTIES_ROUND;
-        
-        if (i_star[l] < 0)
-        {
-            i_star[l] += N_PARTIES_ROUND;
-        }
-        /* * */
     }
 }

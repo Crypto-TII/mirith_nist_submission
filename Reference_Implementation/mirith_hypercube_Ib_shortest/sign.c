@@ -26,6 +26,10 @@
 #include "seed_tree.h"
 #include "sign.h"
 
+#if defined (OFFLINE_CC)
+#include "internal_get_cycles.h"
+#endif
+
 /* Set E_shr_i = (M[0] if i = 0 else 0) + sum_{p = 0}^{PAR_K-1} a_shr[p] * M[p + 1]. */
 void computeE_shr(ff_t E_shr[matrix_bytes_size(PAR_M, PAR_N)],
                   ff_t a_shr[matrix_bytes_size(PAR_K, 1)],
@@ -65,7 +69,6 @@ void sign_phase1_round(
     ff_t a_aux[matrix_bytes_size(PAR_K, 1)],
     ff_t K_aux[matrix_bytes_size(PAR_R, PAR_N - PAR_R)],
     hash_t com_l,
-    
     hash_t salt,
     uint32_t l,
     seed_t seed[N_PARTIES_ROUND],
@@ -76,6 +79,18 @@ void sign_phase1_round(
     
     /* Hashing context. */
     hash_ctx_t hash_ctx;
+
+    ff_t A_shr_i[matrix_bytes_size(PAR_S, PAR_R)];
+    ff_t C_shr_i[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
+    ff_t a_shr_i[matrix_bytes_size(PAR_K, 1)];
+    ff_t K_shr_i[matrix_bytes_size(PAR_R, PAR_N - PAR_R)];
+    hash_t com_i_l;
+
+    /* Set 'a_aux = a'. */
+    matrix_copy(a_aux, a, PAR_K, 1);
+
+    /* Set 'K_aux = K'. */
+    matrix_copy(K_aux, K, PAR_R, PAR_N - PAR_R);
 
     /* Initialize main parties shares to zero.*/
     for (i = 0; i < D_DIMENSION; i++)
@@ -93,38 +108,29 @@ void sign_phase1_round(
     /* Initialize the hashing context to compute 'com'. */
     hash_init(&hash_ctx);
     hash_update(hash_ctx, salt, HASH_SIZE);
-    hash_update(hash_ctx, &l, sizeof(l));
+    hash_update(hash_ctx, (uint8_t *)&l, sizeof(l));
+
+#if defined (OFFLINE_CC)
+begin_offline = get_cycles();
+#endif
 
     /* Initialize 'A' and 'C_aux' to zero. */
     matrix_init_zero(A, PAR_S, PAR_R);
     matrix_init_zero(C_aux, PAR_S, PAR_N - PAR_R);
-
-    /* Set 'a_aux = a'. */
-    matrix_copy(a_aux, a, PAR_K, 1);
-
-    /* Set 'K_aux = K'. */
-    matrix_copy(K_aux, K, PAR_R, PAR_N - PAR_R);
     
     for (i = 0; i < N_PARTIES_ROUND; i++)
     {
         prng_t prng;
 
-        ff_t A_shr_i[matrix_bytes_size(PAR_S, PAR_R)];
-        ff_t C_shr_i[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
-        ff_t a_shr_i[matrix_bytes_size(PAR_K, 1)];
-        ff_t K_shr_i[matrix_bytes_size(PAR_R, PAR_N - PAR_R)];
-    
-        hash_t com_i_l;
-
         /* Initialize PRNG from 'seed[i]'. */
         prng_init(&prng, salt, seed[i]); 
-            
+
         /* Generate the random matrix 'A_shr_i'. */
         matrix_init_random(A_shr_i, PAR_S, PAR_R, &prng);
 
         /* Add 'A_shr_i' to 'A'. */
         matrix_add(A, A_shr_i, PAR_S, PAR_R);
-                
+
         if (i != N_PARTIES_ROUND - 1)
         {
             /* Generate random matrices 'a_shr_i', 'C_shr_i', 'K_shr_i'. */
@@ -148,44 +154,55 @@ void sign_phase1_round(
             /* Substract 'K_shr_i' from 'K_aux'. In this way, at the end it would be
              * 'K_aux = K - sum_{i < N_PARTIES_ROUND - 1} K_shr_i'. */
             matrix_subtract(K_aux, K_shr_i, PAR_R, PAR_N - PAR_R);
+
+            /* Aggregate to the main parties. */
+            for (k = 0; k < D_DIMENSION; k++)
+            {
+                uint32_t i_star_k;
+                
+                i_star_k = (i >> k) & 1u;
+
+                matrix_add(A_main_shr[k][i_star_k], A_shr_i, PAR_S, PAR_R);
+                matrix_add(C_main_shr[k][i_star_k], C_shr_i, PAR_S, PAR_N - PAR_R);
+                matrix_add(a_main_shr[k][i_star_k], a_shr_i, PAR_K, 1);
+                matrix_add(K_main_shr[k][i_star_k], K_shr_i, PAR_R, PAR_N - PAR_R);
+            }
+            /* * */
         }
-        else 
-        {
-            ff_t AxK[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
-
-            /* Compute the product of 'A' and 'K'. */
-            matrix_product(AxK, A, K, PAR_S, PAR_R, PAR_N - PAR_R);
-            
-            /* Add 'AxK' to 'C_aux', so that
-             * 'C_aux = A * K - sum_{j < N_PARTIES_ROUND - 1} C_shr_i'. */
-            matrix_add(C_aux, AxK, PAR_S, PAR_N - PAR_R);
-
-            /* Copy 'C_aux', 'a_aux', 'K_aux' over 'C_shr_i', 'a_shr_i', K_shr_i', respectively. */
-            matrix_copy(C_shr_i, C_aux, PAR_S, PAR_N - PAR_R);
-            matrix_copy(a_shr_i, a_aux, PAR_K, 1);
-            matrix_copy(K_shr_i, K_aux, PAR_R, PAR_N - PAR_R);
-        
-            /* Compute the commitment. */
-            hash_digest0_aux(com_i_l, salt, l, i, seed[N_PARTIES_ROUND - 1],
-                a_aux, K_aux, C_aux);
-
-            hash_update(hash_ctx, com_i_l, HASH_SIZE);
-        }
-
-        /* Aggregate to the main parties. */
-        for (k = 0; k < D_DIMENSION; k++)
-        {
-            uint32_t i_star_k;
-            
-            i_star_k = (i >> k) & 1;
-
-            matrix_add(A_main_shr[k][i_star_k], A_shr_i, PAR_S, PAR_R);
-            matrix_add(C_main_shr[k][i_star_k], C_shr_i, PAR_S, PAR_N - PAR_R);
-            matrix_add(a_main_shr[k][i_star_k], a_shr_i, PAR_K, 1);
-            matrix_add(K_main_shr[k][i_star_k], K_shr_i, PAR_R, PAR_N - PAR_R);
-        }
-        /* * */
     }
+
+#if defined (OFFLINE_CC)
+offline_cc = offline_cc + (get_cycles() - begin_offline);
+#endif
+
+    ff_t AxK[matrix_bytes_size(PAR_S, PAR_N - PAR_S)];
+
+    /* Compute the product of 'A' and 'K'. */
+    matrix_product(AxK, A, K, PAR_S, PAR_R, PAR_N - PAR_R);
+    
+    /* Add 'AxK' to 'C_aux', so that
+        * 'C_aux = A * K - sum_{j < N_PARTIES_ROUND - 1} C_shr_i'. */
+    matrix_add(C_aux, AxK, PAR_S, PAR_N - PAR_R);
+
+    /* Compute the commitment. */
+    hash_digest0_aux(com_i_l, salt, l, N_PARTIES_ROUND - 1, seed[N_PARTIES_ROUND - 1],
+        a_aux, K_aux, C_aux);
+
+    hash_update(hash_ctx, com_i_l, HASH_SIZE);
+
+    /* Aggregate to the main parties. */
+    for (k = 0; k < D_DIMENSION; k++)
+    {
+        uint32_t i_star_k;
+        
+        i_star_k = ((N_PARTIES_ROUND - 1) >> k) & 1;
+
+        matrix_add(A_main_shr[k][i_star_k], A_shr_i, PAR_S, PAR_R);
+        matrix_add(C_main_shr[k][i_star_k], C_aux, PAR_S, PAR_N - PAR_R);
+        matrix_add(a_main_shr[k][i_star_k], a_aux, PAR_K, 1);
+        matrix_add(K_main_shr[k][i_star_k], K_aux, PAR_R, PAR_N - PAR_R);
+    }
+    /* * */
     
     /* Computing 'com'. */
     hash_finalize(hash_ctx, com_l);
@@ -219,10 +236,10 @@ void sign_phase3_round
     uint32_t l
 )
 {
-    uint32_t k, j, p;
+    uint32_t k, p;
 
     ff_t S[matrix_bytes_size(PAR_S, PAR_R)];
-    
+
     /* Open S. */
     {
         ff_t MaL[matrix_bytes_size(PAR_M, PAR_N - PAR_R)];
@@ -243,60 +260,69 @@ void sign_phase3_round
 
         /* Hashing context to compute 'H_k_l'. */
         hash_ctx_t hash_H_k_l_ctx;
-    
+
+
         /* Initialize the hashing context to compute 'H_k_l'. */
         hash_init(&hash_H_k_l_ctx);
         hash_update(hash_H_k_l_ctx, salt, HASH_SIZE);
-        hash_update(hash_H_k_l_ctx, &l, sizeof(l));
-        
-        for (j = 0; j < N_PARTIES; j++) 
-        {
+        hash_update(hash_H_k_l_ctx, (uint8_t *)&l, sizeof(l));
+
+        ff_t V_main_shr_k_j[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
+
             ff_t MaL_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_N - PAR_R)];
             ff_t MaR_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_R)];
             ff_t E_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_N)];
             ff_t RxMaL_main_shr_k_j[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
-            ff_t V_main_shr_k_j[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
             ff_t RxMaR_main_shr_k_j[matrix_bytes_size(PAR_S, PAR_R)];
 
-            /* Set E_main_shr_k_j = (M[0] if i = 0 else 0) + sum_{p = 0}^{PAR_K-1} a_shr[i] * M[p + 1]. */
-            if (j == 0)
-            {
-                matrix_copy(E_main_shr_k_j, M[0], PAR_M, PAR_N);
-            }
-            else
-            {
-                matrix_init_zero(E_main_shr_k_j, PAR_M, PAR_N);
-            }
+#if defined (OFFLINE_CC)
+            // if (j < N_PARTIES - 1)
+                begin_offline = get_cycles();
+#endif
+            /* Compute the shares of all the main party (k, 0) but the last one */
 
+            /* Set E_main_shr_k_j = (M[0] if i = 0 else 0) + sum_{p = 0}^{PAR_K-1} a_shr[i] * M[p + 1]. */
+            matrix_copy(E_main_shr_k_j, M[0], PAR_M, PAR_N);
             for (p = 0; p < PAR_K; p++)
             {
                 ff_t scalar;
 
-                scalar = matrix_get_entry(a_main_shr[k][j], PAR_K, p, 0);
+                scalar = matrix_get_entry(a_main_shr[k][0], PAR_K, p, 0);
                 matrix_add_multiple(E_main_shr_k_j, scalar, M[p + 1], PAR_M, PAR_N);
             }
             /* * */
 
             /* Compute 'MaL_main_shr_k_j' and 'MaR_main_shr_k_j' using the fact
              * that E_main_shr_k_j = [MaL_main_shr_k_j | MaR_main_shr_k_j]. */
-            matrix_horizontal_split(MaL_main_shr_k_j, MaR_main_shr_k_j, E_main_shr_k_j, PAR_M, PAR_N - PAR_R, PAR_R);
+            matrix_horizontal_split(MaL_main_shr_k_j, MaR_main_shr_k_j, E_main_shr_k_j, PAR_M, PAR_N - PAR_R,
+                                    PAR_R);
+
+#if defined (OFFLINE_CC)
+            // if (j < N_PARTIES - 1)
+                offline_cc = offline_cc + (get_cycles() - begin_offline);
+#endif
 
             /* Compute 'R * MaL_main_shr_k_j'. */
             matrix_product(RxMaL_main_shr_k_j, R, MaL_main_shr_k_j, PAR_S, PAR_M, PAR_N - PAR_R);
 
-            /* Set V_main_shr_k_j = S * K_main_shr[k][j] - R * MaL_main_shr_k_j - C_main_shr_k_j. */
-            matrix_product(V_main_shr_k_j, S, K_main_shr[k][j], PAR_S, PAR_R, PAR_N - PAR_R);
+            /* Set V_main_shr_k_j = S * K_main_shr[k][0] - R * MaL_main_shr_k_j - C_main_shr_k_j. */
+            matrix_product(V_main_shr_k_j, S, K_main_shr[k][0], PAR_S, PAR_R, PAR_N - PAR_R);
             matrix_subtract(V_main_shr_k_j, RxMaL_main_shr_k_j, PAR_S, PAR_N - PAR_R);
-            matrix_subtract(V_main_shr_k_j, C_main_shr[k][j], PAR_S, PAR_N - PAR_R);
+            matrix_subtract(V_main_shr_k_j, C_main_shr[k][0], PAR_S, PAR_N - PAR_R);
 
-            /* Overwrite 'A_main_shr[k][j]' with 'S_main_shr[k][j] = R * MaR_main_shr_k_j + A_main_shr[k][j]'. */
+            /* Overwrite 'A_main_shr[k][0]' with 'S_main_shr[k][0] = R * MaR_main_shr_k_j + A_main_shr[k][0]'. */
             matrix_product(RxMaR_main_shr_k_j, R, MaR_main_shr_k_j, PAR_S, PAR_M, PAR_R);
-            matrix_add(A_main_shr[k][j], RxMaR_main_shr_k_j, PAR_S, PAR_R);
-
-            /* Hash 'S_main_shr_k_j', 'V_main_shr_k_j' (NOTE: 'A_main_shr[k][j]' has been overwritten with 'S_main_shr[k][j]'). */
-            hash_update(hash_H_k_l_ctx, A_main_shr[k][j], matrix_bytes_size(PAR_S, PAR_R));
+            matrix_add(A_main_shr[k][0], RxMaR_main_shr_k_j, PAR_S, PAR_R);
+            /* Hash 'S_main_shr_k_j', 'V_main_shr_k_j' (NOTE: 'A_main_shr[k][0]' has been overwritten with 'S_main_shr[k][0]'). */
+            hash_update(hash_H_k_l_ctx, A_main_shr[k][0], matrix_bytes_size(PAR_S, PAR_R));
             hash_update(hash_H_k_l_ctx, V_main_shr_k_j, matrix_bytes_size(PAR_S, PAR_N - PAR_R));
-        }
+
+            /* Compute the shares the last main party (k,1) */
+            matrix_copy(A_main_shr[k][1], S, PAR_S, PAR_R);
+            matrix_subtract(A_main_shr[k][1], A_main_shr[k][0], PAR_S, PAR_R);
+            hash_update(hash_H_k_l_ctx, A_main_shr[k][1], matrix_bytes_size(PAR_S, PAR_R));
+            hash_update(hash_H_k_l_ctx, V_main_shr_k_j, matrix_bytes_size(PAR_S, PAR_N - PAR_R));
+
 
         /* Compute 'H_k_l'. */
         hash_finalize(hash_H_k_l_ctx, H_k_l);
@@ -355,7 +381,7 @@ void open_phase1_round(
     /* Initialize the hashing context to compute 'com_l'. */
     hash_init(&hash_ctx);
     hash_update(hash_ctx, salt, HASH_SIZE);
-    hash_update(hash_ctx, &l, sizeof(l));
+    hash_update(hash_ctx, (uint8_t *)&l, sizeof(l));
 
     for (i = 0; i < N_PARTIES_ROUND; i++)
     {
@@ -448,32 +474,86 @@ void open_phase3_round
     uint32_t l
 )
 {
-    uint32_t k, j, p, i_star_k;
-    
+    uint32_t k, j, p, i_star_k, not_i_start_k;
+
     ff_t S[matrix_bytes_size(PAR_S, PAR_R)];
 
-    
+    /* Iteration `k=0`. In this iteration we compute the matrix `S`*/
     for (k = 0; k < D_DIMENSION; k++)
     {
         ff_t S_main_shr_k[N_PARTIES][matrix_bytes_size(PAR_S, PAR_R)];
         ff_t V_main_shr_k[N_PARTIES][matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
         ff_t MaL_main_shr_k[N_PARTIES][matrix_bytes_size(PAR_M, PAR_N - PAR_R)];
-        
+
         hash_t H_k_l;
 
         /* Hash context to compute 'H_k_l'.*/
         hash_ctx_t hash_H_k_l_ctx;
-    
+
         /* Initialize the hashing context to compute 'H_k_l'. */
         hash_init(&hash_H_k_l_ctx);
         hash_update(hash_H_k_l_ctx, salt, HASH_SIZE);
-        hash_update(hash_H_k_l_ctx, &l, sizeof(l));
+        hash_update(hash_H_k_l_ctx, (uint8_t * ) & l, sizeof(l));
 
         i_star_k = (i_star >> k) & 1;
+        not_i_start_k = (i_star_k + 1) % 2;
 
-        for (j = 0; j < N_PARTIES; j++)
+        if (k == 0)
         {
 
+            for (j = 0; j < N_PARTIES; j++)
+            {
+
+                ff_t E_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_N)];
+                ff_t MaR_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_R)];
+
+                /* Set E_main_shr_k_j = (M[0] if j = 0 else 0) + sum_{j = 0}^{PAR_K-1} a_main_shr[k][j] * M[j + 1]. */
+                if (j == 0)
+                {
+                    matrix_copy(E_main_shr_k_j, M[0], PAR_M, PAR_N);
+                }
+                else
+                {
+                    matrix_init_zero(E_main_shr_k_j, PAR_M, PAR_N);
+                }
+
+                for (p = 0; p < PAR_K; p++) {
+                    ff_t scalar;
+
+                    scalar = matrix_get_entry(a_main_shr[k][j], PAR_K, p, 0);
+                    matrix_add_multiple(E_main_shr_k_j, scalar, M[p + 1], PAR_M, PAR_N);
+                }
+                /* * */
+
+                /* Compute 'MaL_main_shr[k][j]' and 'MaR_main_shr_k_j' using the fact
+                 * that E_main_shr_k_j = [MaL_main_shr[k][j] | MaR_main_shr_k_j]. */
+                matrix_horizontal_split(MaL_main_shr_k[j], MaR_main_shr_k_j, E_main_shr_k_j, PAR_M, PAR_N - PAR_R,
+                                        PAR_R);
+
+
+                /* Set 'S_main_shr[k][j] = R * MaR_main_shr_k_j + A_main_shr[k][j]'. */
+                matrix_product(S_main_shr_k[j], R, MaR_main_shr_k_j, PAR_S, PAR_M, PAR_R);
+                matrix_add(S_main_shr_k[j], A_main_shr[k][j], PAR_S, PAR_R);
+
+                if (j == i_star_k) {
+                    matrix_add(S_main_shr_k[j], S_star, PAR_S, PAR_R);
+                }
+            }
+
+            /* Open S. */
+            matrix_init_zero(S, PAR_S, PAR_R);
+
+            for (j = 0; j < N_PARTIES; j++)
+            {
+                matrix_add(S, S_main_shr_k[j], PAR_S, PAR_R);
+            }
+            /* * */
+            /* End of iteration `k=0`*/
+        }
+        /* Iterations `k > 0` */
+        else
+        {
+            j = not_i_start_k;
             ff_t E_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_N)];
             ff_t MaR_main_shr_k_j[matrix_bytes_size(PAR_M, PAR_R)];
 
@@ -498,7 +578,8 @@ void open_phase3_round
 
             /* Compute 'MaL_main_shr[k][j]' and 'MaR_main_shr_k_j' using the fact
              * that E_main_shr_k_j = [MaL_main_shr[k][j] | MaR_main_shr_k_j]. */
-            matrix_horizontal_split(MaL_main_shr_k[j], MaR_main_shr_k_j, E_main_shr_k_j, PAR_M, PAR_N - PAR_R, PAR_R);
+            matrix_horizontal_split(MaL_main_shr_k[j], MaR_main_shr_k_j, E_main_shr_k_j, PAR_M, PAR_N - PAR_R,
+                                    PAR_R);
 
 
             /* Set 'S_main_shr[k][j] = R * MaR_main_shr_k_j + A_main_shr[k][j]'. */
@@ -509,54 +590,27 @@ void open_phase3_round
             {
                 matrix_add(S_main_shr_k[j], S_star, PAR_S, PAR_R);
             }
+            matrix_copy(S_main_shr_k[i_star_k], S, PAR_S, PAR_R);
+            matrix_add(S_main_shr_k[i_star_k], S_main_shr_k[j], PAR_S, PAR_R);
         }
 
-        /* Open S. */
-        matrix_init_zero(S, PAR_S, PAR_R);
+        ff_t RxMaL_main_shr_k_j[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
 
-        for (j = 0; j < N_PARTIES; j++)
-        {
-            matrix_add(S, S_main_shr_k[j], PAR_S, PAR_R);
-        }
-        /* * */
+        /* Compute 'R * MaL_main_shr[k][~ i_start_k]'. */
+        matrix_product(RxMaL_main_shr_k_j, R, MaL_main_shr_k[not_i_start_k], PAR_S, PAR_M, PAR_N - PAR_R);
 
-        for (j = 0; j < N_PARTIES; j++)
-        {
-            ff_t RxMaL_main_shr_k_j[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
-
-            /* Skip the '(k, i_star_k)' main party. */
-            if (j == i_star_k)
-            {
-                continue;
-            }
-
-            /* Compute 'R * MaL_main_shr[k][j]'. */
-            matrix_product(RxMaL_main_shr_k_j, R, MaL_main_shr_k[j], PAR_S, PAR_M, PAR_N - PAR_R);
-
-            /* Set V_main_shr[k][j] = S * K_main_shr[k][j] - R * MaL_main_shr_k_j - C_main_shr[k][j]. */
-            matrix_product(V_main_shr_k[j], S, K_main_shr[k][j], PAR_S, PAR_R, PAR_N - PAR_R);
-            matrix_subtract(V_main_shr_k[j], RxMaL_main_shr_k_j, PAR_S, PAR_N - PAR_R);
-            matrix_subtract(V_main_shr_k[j], C_main_shr[k][j], PAR_S, PAR_N - PAR_R);
-        }
-
-        /* Set V_main_shr[k][i_star_k] = -sum_{i != i_star_k} V_main_shr[k][i]. */
-        matrix_init_zero(V_main_shr_k[i_star_k], PAR_S, PAR_N - PAR_R);
-
-        for (j = 0; j < N_PARTIES; j++)
-        {
-            if (j != i_star_k)
-            {
-                matrix_subtract(V_main_shr_k[i_star_k], V_main_shr_k[j], PAR_S, PAR_N - PAR_R);
-            }
-        }
-        /* * */
+        /* Set V_main_shr[k][j] = S * K_main_shr[k][j] - R * MaL_main_shr_k_j - C_main_shr[k][j]. */
+        matrix_product(V_main_shr_k[not_i_start_k], S, K_main_shr[k][not_i_start_k], PAR_S, PAR_R, PAR_N - PAR_R);
+        matrix_subtract(V_main_shr_k[not_i_start_k], RxMaL_main_shr_k_j, PAR_S, PAR_N - PAR_R);
+        matrix_subtract(V_main_shr_k[not_i_start_k], C_main_shr[k][not_i_start_k], PAR_S, PAR_N - PAR_R);
 
         /* Hash 'S_main_shr[k][j]', 'V_main_shr[k][j]'. */
-        for (j = 0; j < N_PARTIES; j++)
-        {
-            hash_update(hash_H_k_l_ctx, S_main_shr_k[j], matrix_bytes_size(PAR_S, PAR_R));
-            hash_update(hash_H_k_l_ctx, V_main_shr_k[j], matrix_bytes_size(PAR_S, PAR_N - PAR_R));
-        }
+
+        hash_update(hash_H_k_l_ctx, S_main_shr_k[0], matrix_bytes_size(PAR_S, PAR_R));
+        hash_update(hash_H_k_l_ctx, V_main_shr_k[not_i_start_k], matrix_bytes_size(PAR_S, PAR_N - PAR_R));
+        hash_update(hash_H_k_l_ctx, S_main_shr_k[1], matrix_bytes_size(PAR_S, PAR_R));
+        hash_update(hash_H_k_l_ctx, V_main_shr_k[not_i_start_k], matrix_bytes_size(PAR_S, PAR_N - PAR_R));
+
         hash_finalize(hash_H_k_l_ctx, H_k_l);
         hash_update(hash_ctx, H_k_l, HASH_SIZE);
     }
@@ -722,11 +776,19 @@ int crypto_sign_unpacked_keys(uint8_t *sig_msg, size_t *sig_msg_len,
     {
         seed_t seed;
 
+#if defined (OFFLINE_CC)
+begin_offline = get_cycles();
+#endif
+
         /* Generate a random seed. */
         randombytes(seed, SEED_SIZE);
-                
+
         /* Generate a seed tree from the random seed. */
         seed_tree_init(trees[l], salt, seed);
+
+#if defined (OFFLINE_CC)
+offline_cc = offline_cc + (get_cycles() - begin_offline);
+#endif
 
         /* Compute the matrices
          * 'A_rnd[l][0...N_PARTIES_ROUND-1]',
@@ -823,7 +885,7 @@ int crypto_sign_unpacked_keys(uint8_t *sig_msg, size_t *sig_msg_len,
         matrix_product(S_rnd_star[l], R[l], MaR_star, PAR_S, PAR_M, PAR_R);
         matrix_add(S_rnd_star[l], A_star, PAR_S, PAR_R);
     }
-  
+
     /* Pack the signature. */
     pack_signature(sig_msg, &sig_len, salt, hash1, hash2, i_star, trees, com_star,
                    a_aux, K_aux, C_aux, S_rnd_star);
