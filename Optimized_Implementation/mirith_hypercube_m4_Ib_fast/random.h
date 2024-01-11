@@ -20,6 +20,6 @@
 #include <stddef.h>
 
 /* Write 'length' random bytes on 'target'. */
-void randombytes(unsigned char *target, unsigned long long length);
+void randombytes(uint8_t *target, size_t length);
 
 #endif

@@ -11,7 +11,7 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 
-set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG -Og -Wall")
+set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG -O0 -Wall -fsanitize=address")
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -Wall -flto -march=native -ftree-vectorize -funroll-loops -fomit-frame-pointer -fno-stack-protector")
 
 set(COMMON_SOURCES

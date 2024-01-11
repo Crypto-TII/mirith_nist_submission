@@ -31,3 +31,5 @@ add_executable(bench bench/bench_mirith.c ${COMMON_SOURCES})
 add_executable(bench_noinline bench/bench_mirith.c ${COMMON_SOURCES})
 target_compile_options(bench_noinline PRIVATE -fno-inline)
 add_executable(test test/test_mirith.c ${COMMON_SOURCES})
+
+add_executable(arith_test test.c)

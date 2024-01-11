@@ -24,7 +24,7 @@
 
 /* Generate a random pair of public key 'pk' and secret key 'sk'. */
 #define crypto_sign_keypair MIRITH_NAMESPACE(keypair)
-int crypto_sign_keypair(unsigned char *pk, unsigned char *sk);
+int crypto_sign_keypair(uint8_t *pk, uint8_t *sk);
 
 /* Sign the message 'msg' using the secret key 'sk'.
  * 
@@ -34,18 +34,18 @@ int crypto_sign_keypair(unsigned char *pk, unsigned char *sk);
  *
  * The signed message is formatted as '[signature][message]'. */
 #define crypto_sign MIRITH_NAMESPACETOP
-int crypto_sign(unsigned char *sig_msg, unsigned long long *sig_msg_len,
-    const unsigned char *msg, unsigned long long msg_len,
-    const unsigned char *sk);
+int crypto_sign(uint8_t *sig_msg, size_t *sig_msg_len,
+    uint8_t *msg, size_t msg_len,
+    uint8_t *sk);
 
 /* Verify the signed message 'sig_msg' using the public key 'pk'.
  * If the verification succeeds, return '0', write the message over 'msg',
  * and write the length of the message over 'msg_len'.
  * If the verification fails, return '-1'. */
 #define crypto_sign_open MIRITH_NAMESPACE(open)
-int crypto_sign_open(unsigned char *msg, unsigned long long *msg_len,
-    const unsigned char *sig_msg, unsigned long long sig_msg_len,
-    const unsigned char *pk);
+int crypto_sign_open(uint8_t *msg, size_t *msg_len,
+    uint8_t *sig_msg, size_t sig_msg_len,
+    uint8_t *pk);
 
 /* Sign the message 'msg' using the (uncompressed) public key 'M' and
  * secret key 'a', 'K', 'E'.
@@ -55,8 +55,8 @@ int crypto_sign_open(unsigned char *msg, unsigned long long *msg_len,
  * Write the length of the signed message over 'sig_msg_len'.
  *
  * The signed message is formatted as '[signature][message]'. */
-int crypto_sign_unpacked_keys(unsigned char *sig_msg, unsigned long long *sig_msg_len,
-    const unsigned char *msg, unsigned long long msg_len,
+int crypto_sign_unpacked_keys(uint8_t *sig_msg, size_t *sig_msg_len,
+    uint8_t *msg, size_t msg_len,
     ff_t M[PAR_K + 1][matrix_bytes_size(PAR_M, PAR_N)],
     ff_t a[matrix_bytes_size(PAR_K, 1)],
     ff_t K[matrix_bytes_size(PAR_R, PAR_N - PAR_R)],

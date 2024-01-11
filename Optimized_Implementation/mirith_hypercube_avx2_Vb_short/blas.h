@@ -11,12 +11,13 @@
 
 #include "matrix.h"
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 const uint8_t __gf16_mulbase[128] __attribute__((aligned(32))) = {
-0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f, 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f, 
-0x00,0x02,0x04,0x06,0x08,0x0a,0x0c,0x0e, 0x03,0x01,0x07,0x05,0x0b,0x09,0x0f,0x0d, 0x00,0x02,0x04,0x06,0x08,0x0a,0x0c,0x0e, 0x03,0x01,0x07,0x05,0x0b,0x09,0x0f,0x0d, 
-0x00,0x04,0x08,0x0c,0x03,0x07,0x0b,0x0f, 0x06,0x02,0x0e,0x0a,0x05,0x01,0x0d,0x09, 0x00,0x04,0x08,0x0c,0x03,0x07,0x0b,0x0f, 0x06,0x02,0x0e,0x0a,0x05,0x01,0x0d,0x09, 
-0x00,0x08,0x03,0x0b,0x06,0x0e,0x05,0x0d, 0x0c,0x04,0x0f,0x07,0x0a,0x02,0x09,0x01, 0x00,0x08,0x03,0x0b,0x06,0x0e,0x05,0x0d, 0x0c,0x04,0x0f,0x07,0x0a,0x02,0x09,0x01, 
+	0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f, 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f, 
+	0x00,0x02,0x04,0x06,0x08,0x0a,0x0c,0x0e, 0x03,0x01,0x07,0x05,0x0b,0x09,0x0f,0x0d, 0x00,0x02,0x04,0x06,0x08,0x0a,0x0c,0x0e, 0x03,0x01,0x07,0x05,0x0b,0x09,0x0f,0x0d, 
+	0x00,0x04,0x08,0x0c,0x03,0x07,0x0b,0x0f, 0x06,0x02,0x0e,0x0a,0x05,0x01,0x0d,0x09, 0x00,0x04,0x08,0x0c,0x03,0x07,0x0b,0x0f, 0x06,0x02,0x0e,0x0a,0x05,0x01,0x0d,0x09, 
+	0x00,0x08,0x03,0x0b,0x06,0x0e,0x05,0x0d, 0x0c,0x04,0x0f,0x07,0x0a,0x02,0x09,0x01, 0x00,0x08,0x03,0x0b,0x06,0x0e,0x05,0x0d, 0x0c,0x04,0x0f,0x07,0x0a,0x02,0x09,0x01, 
 };
 
 //////////////////////////////////////////////
@@ -87,13 +88,19 @@ __m256i gf16_hadd_avx2_32(const __m256i in) {
 /// \param b
 /// \param cBb number of bytes in each column
 /// \return
-__m256i gf16mat_new_core_scatter_helper(const uint8_t *b, const uint32_t mask1) {
+__m256i gf16mat_new_core_scatter_helper(const uint8_t *b,
+										const uint32_t mask1,
+										const uint32_t bytes) {
     const uint32_t mask = 0x0f0f0f0f & mask1;
     const __m256i perm  = _mm256_setr_epi8(0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3);
+	uint8_t arr[4] = {0};
+	for (uint32_t i = 0; i<bytes; i++) {
+		arr[i] = b[i];
+	}
 
     // load 4bytes
-    const uint32_t d11 = ( * (uint32_t *)b)         & mask;
-    const uint32_t d12 = ((*((uint32_t *)b)) >> 4u) & mask;
+    const uint32_t d11 = ( * (uint32_t *)arr)         & mask;
+    const uint32_t d12 = ((*((uint32_t *)arr)) >> 4u) & mask;
 
     __m256i B11 = _mm256_set1_epi32(d11);
     __m256i B12 = _mm256_set1_epi32(d12);
@@ -110,24 +117,17 @@ void gf16mat_new_core_scatter(uint8_t *__restrict__ c,
                               const unsigned int column_A_bytes,
                               const unsigned int nr_cols_A,
                               const uint8_t *__restrict__ b) {
-    // first load A
     __m256i Al1, Al2, Al3,
             Am1, Am2, Am3,
             Ah1, Ah2, Ah3;
 
     /// TODO research question:
     ///     - would it better if `cAb` >= 8 to use `_mm256_i64gather_epi32?`
-
     const uint32_t cBb = (nr_cols_A+1) >> 1;        // nr of bytes in each column in B
-    //const uint32_t nBr = (cBb + 3)/ 4;              // nr of uint32_t in each column of B
-
-    //const uint32_t nAr = (column_A_bytes+3) /4;     // nr of uint32_t in each column in A
     const uint32_t cAb = column_A_bytes;            // nr of bytes in each column in A
     const uint32_t nAc = nr_cols_A;                 // nr of cols in A
     const uint32_t oA = cAb;                        // offset of each column in A
     const __m256i Amask = _mm256_setr_epi32(0, oA, 2*oA, 3*oA, 4*oA, 5*oA, 6*oA, 7*oA);
-    //const __m256i GatherMask = _mm256_setr_epi32(0, oA, 2*oA, 3*oA, 4*oA, 5*oA, 6*oA, 7*oA);
-    //const __m256i FullMask = _mm256_set1_epi32(-1);
 
     /// load the whole matrix A into registers
                    Al1 = _mm256_i32gather_epi32((const int *) (a + 0u), Amask, 1u);
@@ -154,9 +154,9 @@ void gf16mat_new_core_scatter(uint8_t *__restrict__ c,
     const uint32_t mask1 = cAb > 4 ? 0xffffffff : (cAb%4u == 0) ? 0xffffffff : (1u << (8*(cBb%4u))) - 1u;
     const uint32_t mask2 = cAb > 4 ? 0xffffffff : (cAb%4u == 0) ? 0xffffffff : (1u << (8*(cBb%4u))) - 1u;
 
-    __m256i acc1, acc2, acc3;
+    __m256i acc1, acc2, acc3 = _mm256_setzero_si256();
     for (uint32_t i = 0; i < nr_cols_B; ++i) {
-        __m256i B = gf16mat_new_core_scatter_helper(b + i*cBb, mask_B_1);
+        __m256i B = gf16mat_new_core_scatter_helper(b + i*cBb, mask_B_1, MIN(cBb, 4));
 
         // compute the multiplication:
                        acc1 = gf16_mult_avx_compressed_2(Al1, B);
@@ -164,14 +164,14 @@ void gf16mat_new_core_scatter(uint8_t *__restrict__ c,
         if (cAb > 8) { acc3 = gf16_mult_avx_compressed_2(Ah1, B); }
 
         if (nAc > 8) {
-            B = gf16mat_new_core_scatter_helper(b + i*cBb + 4, mask_B_2);
+            B = gf16mat_new_core_scatter_helper(b + i*cBb + 4, mask_B_2, MIN(cBb-4, 4));
                            acc1 ^= gf16_mult_avx_compressed_2(Al2, B);
             if (cAb > 4) { acc2 ^= gf16_mult_avx_compressed_2(Am2, B); }
             if (cAb > 8) { acc3 ^= gf16_mult_avx_compressed_2(Ah2, B); }
         }
 
         if (nAc > 16) {
-            B = gf16mat_new_core_scatter_helper(b + i*cBb + 8, mask_B_3);
+            B = gf16mat_new_core_scatter_helper(b + i*cBb + 8, mask_B_3, MIN(cBb-8, 4));
                            acc1 ^= gf16_mult_avx_compressed_2(Al3, B);
             if (cAb > 4) { acc2 ^= gf16_mult_avx_compressed_2(Am3, B); }
             if (cAb > 8) { acc3 ^= gf16_mult_avx_compressed_2(Ah3, B); }

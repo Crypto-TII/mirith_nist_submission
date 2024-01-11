@@ -24,14 +24,21 @@ and run the command `make all && ./test_mirith`.
 To compile and test the AVX2 optimized implementation of MiRitH, move to
 the folder
 
-`Optimized_Implementation/mirith_avx2_[parameter set]/test`
+`Optimized_Implementation/mirith_hypercube_avx2_[parameter set]/test`
 
 and run the command `make all && ./test_mirith`.
 
 To compile and test the NEON optimized implementation of MiRitH, move to
 the folder
 
-`Optimized_Implementation/mirith_neon_[parameter set]/test`
+`Optimized_Implementation/mirith_hypercube_neon_[parameter set]/test`
+
+and run the command `make all && ./test_mirith`.
+
+To compile and test the Cortex-m4 optimized implementation of MiRitH, move to
+the folder
+
+`Optimized_Implementation/mirith_hypercube_m4_[parameter set]/test`
 
 and run the command `make all && ./test_mirith`.
 
@@ -39,26 +46,33 @@ and run the command `make all && ./test_mirith`.
 
 To benchmark the AVX2 optimized implementation of MiRitH, move to the folder
 
-`Optimized_Implementation/mirith_avx2_[parameter set]/bench`
+`Optimized_Implementation/mirith_hypercube_avx2_[parameter set]/bench`
 
 and run the command `make all && ./bench_mirith`.
 
 To benchmark the NEON optimized implementation of MiRitH, move to the folder
 
-`Optimized_Implementation/mirith_neon_[parameter set]/bench`
+`Optimized_Implementation/mirith_hypercube_neon_[parameter set]/bench`
 
 and run the command `make all && ./bench_mirith`.
+
+To compile and test the Cortex-m4 optimized implementation of MiRitH, move to
+the folder
+
+`Optimized_Implementation/mirith_hypercube_m4_[parameter set]/bench`
+
+and run the command `make all && ./bench_mirith``.
 
 ## Benchmark with SUPERCOP
 
 To benchmark the AVX2 optimized implementation of MiRitH with SUPERCOP, copy
 the folder
 
-`Optimized_Implementation/mirith_avx2_[parameter set]`
+`Optimized_Implementation/mirith_hypercube_avx2_[parameter set]`
 
 into `[SUPERCOP folder]/crypto_sign`, and edit the file
 
-`[SUPERCOP folder]/crypto_sign/mirith_avx2_[parameter set]/config.h`
+`[SUPERCOP folder]/crypto_sign/mirith_hypercube_avx2_[parameter set]/config.h`
 
 by uncommenting the line
 
@@ -66,16 +80,16 @@ by uncommenting the line
 
 Then in the SUPERCOP folder run the command
 
-`./do-part crypto_sign mirith_avx2_[parameter set]`
+`./do-part crypto_sign mirith_hypercube_avx2_[parameter set]`
 
 To benchmark the NEON optimized implementation of MiRitH with SUPERCOP, copy
 the folder
 
-`Optimized_Implementation/mirith_neon_[parameter set]`
+`Optimized_Implementation/mirith_hypercube_neon_[parameter set]`
 
 into `[SUPERCOP folder]/crypto_sign`, and edit the file
 
-`[SUPERCOP folder]/crypto_sign/mirith_neon_[parameter set]/config.h`
+`[SUPERCOP folder]/crypto_sign/mirith_hypercube_neon_[parameter set]/config.h`
 
 by uncommenting the line
 
@@ -83,5 +97,23 @@ by uncommenting the line
 
 Then in the SUPERCOP folder run the command
 
-`./do-part crypto_sign mirith_neon_[parameter set]`
+`./do-part crypto_sign mirith_hypercube_neon_[parameter set]`
+
+
+To benchmark the Cortex-m4 optimized implementation of MiRitH with SUPERCOP, copy
+the folder
+
+`Optimized_Implementation/mirith_hypercube_m4_[parameter set]`
+
+into `[SUPERCOP folder]/crypto_sign`, and edit the file
+
+`[SUPERCOP folder]/crypto_sign/mirith_hypercube_m4_[parameter set]/config.h`
+
+by uncommenting the line
+
+`/* #define MIRITH_SUPERCOP */`
+
+Then in the SUPERCOP folder run the command
+
+`./do-part crypto_sign mirith_hypercube_m4_[parameter set]`
 

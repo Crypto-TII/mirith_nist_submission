@@ -27,9 +27,9 @@ void seed_tree_init(seed_t tree[TREE_N_NODES], const hash_t salt, const seed_t s
 uint8_t *seed_tree_get_leaves(seed_t tree[TREE_N_NODES]);
 
 /* Pack 'tree' into 'packed_tree' to recover later all seeds but the 'i0'th. */
-void seed_tree_pack(seed_t packed_tree[TREE_HEIGHT], seed_t tree[TREE_N_NODES], int i0);
+void seed_tree_pack(seed_t packed_tree[TREE_HEIGHT], seed_t tree[TREE_N_NODES], uint32_t i0);
 
 /* Unpack 'packed_tree' to 'seeds', recovering all seeds but the 'i0'th. */
-void seed_tree_unpack(seed_t seeds[N_PARTIES_ROUND], seed_t packed_tree[TREE_HEIGHT], int i0);
+void seed_tree_unpack(seed_t seeds[N_PARTIES_ROUND], const hash_t salt, seed_t packed_tree[TREE_HEIGHT], uint32_t i0);
 
 #endif

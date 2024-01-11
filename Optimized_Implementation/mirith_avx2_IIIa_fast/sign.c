@@ -168,7 +168,9 @@ void sign_phase3_round
         ff_t MaL_shr_i[matrix_bytes_size(PAR_M, PAR_N - PAR_R)];
         ff_t MaR_shr_i[matrix_bytes_size(PAR_M, PAR_R)];
         ff_t E_shr_i[matrix_bytes_size(PAR_M, PAR_N)];
+        ff_t RxMaL_shr_i[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
         ff_t V_shr_i[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
+        ff_t RxMaR_shr_i[matrix_bytes_size(PAR_S, PAR_R)];
                 
         /* Set E_shr_i = (M[0] if i = 0 else 0) + sum_{j = 0}^{PAR_K-1} a_shr[i] * M[j + 1]. */
         if (i == 0)
@@ -194,13 +196,17 @@ void sign_phase3_round
         matrix_horizontal_split(MaL_shr_i, MaR_shr_i, E_shr_i, PAR_M, PAR_N - PAR_R, PAR_R);
         matrix_negate(MaR_shr_i, PAR_M, PAR_R);
         
+        /* Compute 'R * MaL_shr_i'. */
+        matrix_product(RxMaL_shr_i, R, MaL_shr_i, PAR_S, PAR_M, PAR_N - PAR_R);
+        
         /* Set V_shr_i = S * K_shr[i] - R * MaL_shr_i - C_shr[i]. */
         matrix_product(V_shr_i, S, K_shr[i], PAR_S, PAR_R, PAR_N - PAR_R);
-        matrix_subtract_product(V_shr_i, R, MaL_shr_i, PAR_S, PAR_M, PAR_N - PAR_R);
+        matrix_subtract(V_shr_i, RxMaL_shr_i, PAR_S, PAR_N - PAR_R);
         matrix_subtract(V_shr_i, C_shr[i], PAR_S, PAR_N - PAR_R);
         
         /* Overwrite 'A_shr[i]' with 'S_shr[i] = R * MaR_shr_i + A_shr[i]'. */
-        matrix_add_product(A_shr[i], R, MaR_shr_i, PAR_S, PAR_M, PAR_R);
+        matrix_product(RxMaR_shr_i, R, MaR_shr_i, PAR_S, PAR_M, PAR_R);
+        matrix_add(A_shr[i], RxMaR_shr_i, PAR_S, PAR_R);
 
         /* Hash 'S_shr[i]', 'V_shr_i' (NOTE: 'A_shr[i]' has been overwritten with 'S_shr[i]'). */
         hash_update(hash_ctx, A_shr[i], matrix_bytes_size(PAR_S, PAR_R));
@@ -222,6 +228,7 @@ void sign_phase3_round
  * while hashing their commitments.
  */
 void open_phase1_round(
+
     hash_ctx_t hash1_ctx,
     hash_t salt,
     uint32_t l,
@@ -370,15 +377,20 @@ void open_phase3_round
         
     for (i = 0; i < N_PARTIES; i++)
     {
+        ff_t RxMaL_shr_i[matrix_bytes_size(PAR_S, PAR_N - PAR_R)];
+
         /* Skip the 'i_star' party. */
         if (i == i_star)
         {
             continue;
         }
         
+        /* Compute 'R * MaL_shr[i]'. */
+        matrix_product(RxMaL_shr_i, R, MaL_shr[i], PAR_S, PAR_M, PAR_N - PAR_R);
+        
         /* Set V_shr[i] = S * K_shr[i] - R * MaL_shr_i - C_shr[i]. */
         matrix_product(V_shr[i], S, K_shr[i], PAR_S, PAR_R, PAR_N - PAR_R);
-        matrix_subtract_product(V_shr[i], R, MaL_shr[i], PAR_S, PAR_M, PAR_N - PAR_R);
+        matrix_subtract(V_shr[i], RxMaL_shr_i, PAR_S, PAR_N - PAR_R);
         matrix_subtract(V_shr[i], C_shr[i], PAR_S, PAR_N - PAR_R);
     }
 
@@ -487,6 +499,10 @@ int crypto_sign(uint8_t *sig_msg, size_t *sig_msg_len,
 
     /* Unpack the secret key (and the public key). */
     unpack_secret_key(M, a, K, E, sk);
+
+	/* copy the message to the end of the signature buffer.
+	 * This allows for cases where 'sig' = 'msg'; */
+    memcpy(sig_msg + CRYPTO_BYTES, msg, msg_len);
 
     /* Sign the message. */
     return crypto_sign_unpacked_keys(sig_msg, sig_msg_len,
@@ -597,7 +613,7 @@ int crypto_sign_unpacked_keys(uint8_t *sig_msg, size_t *sig_msg_len,
     pack_signature(sig_msg, &sig_len, salt, hash1, hash2, i_star, trees, com, a_rnd_shr, K_rnd_shr, C_rnd_shr, A_rnd_shr);
 
     /* Append the message to the signature. */
-    memcpy(sig_msg + sig_len, msg, msg_len);
+    memcpy(sig_msg + sig_len, sig_msg + CRYPTO_BYTES, msg_len);
     
     /* Update 'sign_msg_len'. */
     if (sig_msg_len != NULL)
@@ -644,7 +660,7 @@ int crypto_sign_open(uint8_t *msg, size_t *msg_len,
     prng_t prng;
     
     /* Other variables. */
-    size_t l;
+    uint32_t l;
 
     /* Signature length. */
     size_t sig_len;
@@ -658,15 +674,6 @@ int crypto_sign_open(uint8_t *msg, size_t *msg_len,
     {
         /* Failure. */
         return -1;        
-    }
-
-    /* Check that the signature length is not too long, which could
-     * happens if the signature has been corrupted. */
-    if (sig_len >= sig_msg_len
-        || sig_len > CRYPTO_BYTES)
-    {
-        /* Failure. */
-        return -1;
     }
 
     /* Compute the message length. */

@@ -49,7 +49,7 @@ static prng_t prng_singleton;
 
 #ifndef MIRITH_SUPERCOP
 
-void randombytes(unsigned char *target, unsigned long long length)
+void randombytes(uint8_t *target, size_t length)
 {
 
 #ifdef MIRITH_DETERMINISTIC

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c11 -Wall -Wextra -pedantic
+CFLAGS=-std=c11 -Wall -Wextra -pedantic -g -fsanitize=address
 DEPS=$(wildcard ../*.h)
 OBJ=$(patsubst ../%.c,../%.o,$(wildcard ../*.c))
 OBJ+=$(patsubst ../%.s,../%.o,$(wildcard ../*.s))

@@ -19,22 +19,31 @@ set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -Wall -flto -march=native -mfpu=neon -fl
 set(CMAKE_CXX_FLAGS_DEBUG "-g -DDEBUG -O0 -Wall -flax-vector-conversions")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -Wall -flto -march=native -mfpu=neon -flax-vector-conversions -ftree-vectorize -funroll-loops -fomit-frame-pointer -fno-stack-protector")
 
+set(NIST_SOURCES
+        ${PROJECT_SOURCE_DIR}/matrix.c
+        ${PROJECT_SOURCE_DIR}/hash.c
+        ${PROJECT_SOURCE_DIR}/packing.c
+        ${PROJECT_SOURCE_DIR}/prng.c
+        ${PROJECT_SOURCE_DIR}/nist/rng.c
+        ${PROJECT_SOURCE_DIR}/seed_tree.c
+        ${PROJECT_SOURCE_DIR}/sign.c
+        ${PROJECT_SOURCE_DIR}/challenges.c
+        ${PROJECT_SOURCE_DIR}/KeccakHash.c
+        ${PROJECT_SOURCE_DIR}/KeccakP-1600-opt64.c
+        )
 set(COMMON_SOURCES
         ${PROJECT_SOURCE_DIR}/matrix.c
-        ${PROJECT_SOURCE_DIR}/hash.cpp
+        ${PROJECT_SOURCE_DIR}/hash.c
         ${PROJECT_SOURCE_DIR}/packing.c
         ${PROJECT_SOURCE_DIR}/prng.c
         ${PROJECT_SOURCE_DIR}/random.c
         ${PROJECT_SOURCE_DIR}/seed_tree.c
         ${PROJECT_SOURCE_DIR}/sign.c
-        ${PROJECT_SOURCE_DIR}/challenges.cpp
+        ${PROJECT_SOURCE_DIR}/challenges.c
         ${PROJECT_SOURCE_DIR}/KeccakHash.c
         ${PROJECT_SOURCE_DIR}/KeccakP-1600-opt64.c
         )
 
-add_executable(bench bench/bench_mirith.c ${COMMON_SOURCES})
-add_executable(bench_noinline bench/bench_mirith.c ${COMMON_SOURCES})
-target_compile_options(bench_noinline PRIVATE -fno-inline)
-
 add_executable(test test/test_mirith.c ${COMMON_SOURCES})
-add_executable(playground playground.cpp)
+add_executable(nist nist/PQCgenKAT_sign.c ${NIST_SOURCES})
+target_link_libraries(nist crypto)
